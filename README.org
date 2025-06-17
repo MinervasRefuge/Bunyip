@@ -1,0 +1,9 @@
+#+OPTIONS: toc:nil
+#+OPTIONS: ^:nil
+* Bunyip
+API Exploration with Guile.
+
+---------
+BSD-3-Clause : Copyright © 2025 Abigale Raeck.
+AND
+GPL-3+ : Copyright © 2025 Abigale Raeck.
