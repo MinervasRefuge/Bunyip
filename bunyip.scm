@@ -335,8 +335,15 @@
    (jit-block-ptr block)
    (jit-location-ptr/nullable location)))
 
+(define* (block-end/return block return-value #:optional #:key (location #f))
+  (guards (f-or-jit-location? location))
+
+  (f:block-end-with-return/void
+   (jit-block-ptr block)
+   (jit-location-ptr/nullable location)
+   (jit-rvalue-ptr return-value)))
+
 ;; f:block-end-with-jump/void
-;; f:block-end-with-return/void
 ;; f:block-end-with-switch/void
 ;; f:block-end-with-conditional/void
 ;; f:block-end-with-extended-asm-goto/gcc-jit-extended-asm-*
@@ -357,7 +364,32 @@
 (define (jit-result-release result)
   (f:result-release/void (jit-result-ptr result)))
 
+(define* (set-boolean-option! option bool #:optional (context (current-context)))
+  (guards (boolean? bool)
+          (enum:bool-option? option))
+  
+  (f:context-set-bool-option/void
+   (jit-context-ptr context)
+   (hashq-ref enum:bool-option/sym->int option)
+   (if bool 1 0)))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (new-binary-op binary-op return-type a b #:optional (context (current-context)) #:key (location #f))
+   (guards
+    (f-or-jit-location? location)
+    (enum:binary-op? binary-op))
+
+   (f:context-new-binary-op/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (hashq-ref enum:binary-op/sym->int binary-op)
+    (jit-type-ptr return-type)
+    (jit-rvalue-ptr a)
+    (jit-rvalue-ptr b))))
+
 
+
 (define (example-1)
   (define type:const-char* (symbol->jit-type 'const-char-ptr))
   (define type:void        (symbol->jit-type 'void))
@@ -377,12 +409,37 @@
 
   (compile-jit))
 
-
 (define (run-example-1)
   (parameterize ((current-context (context-acquire)))
+    (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-1))
            (gfn (jit-result->get-code-ptr result "greet")))
       ((pointer->procedure void gfn (list '*)) (string->pointer "Abby!"))
+      (jit-result-release result))
+    
+    (context-release (current-context))))
+
+
+
+(define (example-2)
+  (define type:int (symbol->jit-type 'int))
+
+  (let* ((param-i    (new-parameter type:int "i"))
+         (square-def (new-function "square" 'exported type:int (list param-i)))
+         (block      (new-block square-def))
+         (expr       (new-binary-op 'mult type:int 
+                                    (jit-parameter->jit-rvalue param-i)
+                                    (jit-parameter->jit-rvalue param-i))))
+    (block-end/return block expr)
+    
+    (compile-jit)))
+
+(define (run-example-2)
+  (parameterize ((current-context (context-acquire)))
+    (set-boolean-option! 'dump-generated-code #t)
+    (let* ((result (example-2))
+           (gfn (jit-result->get-code-ptr result "square")))
+      (format #t "squaring in jit: ~s~%" ((pointer->procedure int gfn (list int)) 5))
       (jit-result-release result))
     
     (context-release (current-context))))
