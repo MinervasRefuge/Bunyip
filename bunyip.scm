@@ -269,10 +269,33 @@
 
 (with-return-pointer-guard
  <jit-rvalue>
- (define* (jit-type->zero type #:optional (context (current-context)))
+ (define* (jit-type->0 type #:optional (context (current-context)))
    (f:context-zero/gcc-jit-rvalue-*
     (jit-context-ptr context)
     (jit-type-ptr type))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (jit-type->1 type #:optional (context (current-context)))
+   (f:context-one/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (jit-type-ptr type))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (integer->jit-rvalue type int #:optional (context (current-context)))
+   (guards (integer? int))
+   
+   (f:context-new-rvalue-from-int/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (jit-type-ptr type)
+    int)))
+
+;; (f:context-new-rvalue-from-ptr/gcc-jit-rvalue-*
+;;  f:context-new-rvalue-from-long/gcc-jit-rvalue-*
+;;  f:context-new-rvalue-from-double/gcc-jit-rvalue-*
+;;  f:context-new-rvalue-from-vector/gcc-jit-rvalue-*)
+
 
 
                                         ; Common Functions
@@ -373,9 +396,25 @@
    (jit-location-ptr/nullable location)
    (jit-rvalue-ptr return-value)))
 
-;; f:block-end-with-jump/void
+(define* (block-end/jump block block-target #:optional #:key (location #f))
+  (guards (f-or-jit-location? location))
+
+  (f:block-end-with-jump/void
+   (jit-block-ptr block)
+   (jit-location-ptr/nullable location)
+   (jit-block-ptr block-target)))
+
+(define* (block-end/conditional block boolean true-block false-block #:optional #:key (location #f))
+  (guards (f-or-jit-location? location))
+
+  (f:block-end-with-conditional/void
+   (jit-block-ptr block)
+   (jit-location-ptr/nullable location)
+   (jit-rvalue-ptr boolean)
+   (jit-block-ptr true-block)
+   (jit-block-ptr false-block)))
+
 ;; f:block-end-with-switch/void
-;; f:block-end-with-conditional/void
 ;; f:block-end-with-extended-asm-goto/gcc-jit-extended-asm-*
 
 (define* (compile-jit #:optional (context (current-context)))
@@ -416,6 +455,51 @@
     (jit-rvalue-ptr a)
     (jit-rvalue-ptr b))))
 
+(with-return-pointer-guard
+ <jit-lvalue>
+ (define* (new-local function name type #:optional #:key (location #f))
+   (guards
+    (f-or-jit-location? location)
+    (string? name))
+   
+   (f:function-new-local/gcc-jit-lvalue-*
+    (jit-function-ptr function)
+    (jit-location-ptr/nullable location)
+    (jit-type-ptr type)
+    (string->pointer name))))
+
+(define* (add-assignment block lvalue rvalue #:optional #:key (location #f))
+  (guards (f-or-jit-location? location))
+  
+  (f:block-add-assignment/void
+   (jit-block-ptr block)
+   (jit-location-ptr/nullable location)
+   (jit-lvalue-ptr lvalue)
+   (jit-rvalue-ptr rvalue)))
+
+(define* (add-assignment/op block operation lvalue rvalue #:optional #:key (location #f))
+  (guards (f-or-jit-location? location)
+          (enum:binary-op? operation))
+
+  (f:block-add-assignment-op/void
+   (jit-block-ptr block)
+   (jit-location-ptr/nullable location)
+   (jit-lvalue-ptr lvalue)
+   (hashq-ref enum:binary-op/sym->int operation)
+   (jit-rvalue-ptr rvalue)))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (new-comparison compare a b #:optional (context (current-context)) #:key (location #f))
+   (guards (enum:comparison? compare)
+           (f-or-jit-location? location))
+   
+   (f:context-new-comparison/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (hashq-ref enum:comparison/sym->int compare)
+    (jit-rvalue-ptr a)
+    (jit-rvalue-ptr b))))
 
 
                                         ; GC Hook Cleanup
@@ -481,5 +565,39 @@
            (gfn (jit-result->get-code-ptr result "square")))
       (format #t "squaring 5 in jit: ~s~%" ((pointer->procedure int gfn (list int)) 5)))))
 
+
+
+(define (example-3)
+  (define type:int (symbol->jit-type 'int))
+
+  (let* ((param-n (new-parameter type:int "n"))
+         (fn (new-function "loop_test" 'exported type:int (list param-n)))
+         (local-i   (new-local fn "i"   type:int))
+         (local-sum (new-local fn "sum" type:int))
+         (block:initial  (new-block fn "inital"))
+         (block:lp-cond  (new-block fn "loop_cond"))
+         (block:lp-body  (new-block fn "loop_body"))
+         (block:after-lp (new-block fn "after_loop")))
+    (add-assignment block:initial local-sum (jit-type->0 type:int))
+    (add-assignment block:initial local-i   (jit-type->0 type:int))
+    (block-end/jump block:initial block:lp-cond)
+
+    (let ((cmp (new-comparison 'ge (jit-lvalue->jit-rvalue local-i) (jit-parameter->jit-rvalue param-n))))
+      (block-end/conditional block:lp-cond cmp block:after-lp block:lp-body))
     
-    (context-release (current-context))))
+    (add-assignment/op block:lp-body 'plus local-sum (new-binary-op 'mult type:int
+                                                                    (jit-lvalue->jit-rvalue local-i)
+                                                                    (jit-lvalue->jit-rvalue local-i)))
+    (add-assignment/op block:lp-body 'plus local-i (jit-type->1 type:int))
+    (block-end/jump block:lp-body block:lp-cond)
+
+    (block-end/return block:after-lp (jit-lvalue->jit-rvalue local-sum))
+    
+    (compile-jit)))
+
+(define (run-example-3)
+  (parameterize ((current-context (context-acquire)))
+    (set-boolean-option! 'dump-generated-code #t)
+    (let* ((result (example-3))
+           (gfn (jit-result->get-code-ptr result "loop_test")))
+      (format #t "result of loop over 10: ~s~%" ((pointer->procedure int gfn (list int)) 10)))))
