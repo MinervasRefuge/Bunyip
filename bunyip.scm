@@ -98,6 +98,10 @@
 
 
 (define current-context (make-parameter #f))
+
+(define *guardian-jit-context* (make-guardian))
+(define *guardian-jit-result*  (make-guardian))
+
 
                                         ; Printers
 
@@ -274,7 +278,9 @@
                                         ; Common Functions
 
 (define (context-acquire)
-  (make-jit-context (f:context-acquire/gcc-jit-context-*)))
+  (let ((cx (make-jit-context (f:context-acquire/gcc-jit-context-*))))
+    (*guardian-jit-context* cx)
+    cx))
 
 (define (context-release context)
   (f:context-release/void (jit-context-ptr context)))
@@ -372,18 +378,25 @@
 ;; f:block-end-with-conditional/void
 ;; f:block-end-with-extended-asm-goto/gcc-jit-extended-asm-*
 
-(with-return-pointer-guard
- <jit-result>
- (define* (compile-jit #:optional (context (current-context)))
-   (f:context-compile/gcc-jit-result-*
-    (jit-context-ptr context))))
-
+(define* (compile-jit #:optional (context (current-context)))
+  (let ((ptr (f:context-compile/gcc-jit-result-*
+              (jit-context-ptr context))))
+    (if (null-pointer? ptr)
+        #f
+        (let ((res (make-jit-result ptr)))
+          (*guardian-jit-result* res)
+          res))))
+            
 (define (jit-result->get-code-ptr result name)
   (guards (string? name))
 
   (f:result-get-code/void-*
    (jit-result-ptr result)
    (string->pointer name)))
+
+(define (jit-result->procedure result name ffi-return-type . ffi-arg-types)
+  (let ((pptr (jit-result->get-code-ptr result name)))
+    (apply pointer->procedure ffi-return-type pptr ffi-arg-types)))
 
 (define (jit-result-release result)
   (f:result-release/void (jit-result-ptr result)))
@@ -402,6 +415,22 @@
     (jit-type-ptr return-type)
     (jit-rvalue-ptr a)
     (jit-rvalue-ptr b))))
+
+
+
+                                        ; GC Hook Cleanup
+
+(add-hook! after-gc-hook
+  (λ () (let lp ((discard (*guardian-jit-context*)))
+          (when discard
+            (context-release discard)
+            (lp (*guardian-jit-context*))))))
+
+(add-hook! after-gc-hook
+  (λ () (let lp ((discard (*guardian-jit-result*)))
+          (when discard
+            (jit-result-release discard)
+            (lp (*guardian-jit-result*))))))
 
 
 
@@ -429,10 +458,7 @@
     (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-1))
            (gfn (jit-result->get-code-ptr result "greet")))
-      ((pointer->procedure void gfn (list '*)) (string->pointer "Abby!"))
-      (jit-result-release result))
-    
-    (context-release (current-context))))
+      ((pointer->procedure void gfn (list '*)) (string->pointer "Abby!")))))
 
 
 
@@ -446,7 +472,6 @@
                                     (jit-parameter->jit-rvalue param-i)
                                     (jit-parameter->jit-rvalue param-i))))
     (block-end/return block expr)
-    
     (compile-jit)))
 
 (define (run-example-2)
@@ -454,7 +479,7 @@
     (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-2))
            (gfn (jit-result->get-code-ptr result "square")))
-      (format #t "squaring in jit: ~s~%" ((pointer->procedure int gfn (list int)) 5))
-      (jit-result-release result))
+      (format #t "squaring 5 in jit: ~s~%" ((pointer->procedure int gfn (list int)) 5)))))
+
     
     (context-release (current-context))))
