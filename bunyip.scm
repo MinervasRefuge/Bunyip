@@ -552,7 +552,7 @@
   (let* ((param-i    (new-parameter type:int "i"))
          (square-def (new-function "square" 'exported type:int (list param-i)))
          (block      (new-block square-def))
-         (expr       (new-binary-op 'mult type:int 
+         (expr       (new-binary-op '* type:int 
                                     (jit-parameter->jit-rvalue param-i)
                                     (jit-parameter->jit-rvalue param-i))))
     (block-end/return block expr)
@@ -582,13 +582,13 @@
     (add-assignment block:initial local-i   (jit-type->0 type:int))
     (block-end/jump block:initial block:lp-cond)
 
-    (let ((cmp (new-comparison 'ge (jit-lvalue->jit-rvalue local-i) (jit-parameter->jit-rvalue param-n))))
+    (let ((cmp (new-comparison '>= (jit-lvalue->jit-rvalue local-i) (jit-parameter->jit-rvalue param-n))))
       (block-end/conditional block:lp-cond cmp block:after-lp block:lp-body))
     
-    (add-assignment/op block:lp-body 'plus local-sum (new-binary-op 'mult type:int
+    (add-assignment/op block:lp-body '+ local-sum (new-binary-op '* type:int
                                                                     (jit-lvalue->jit-rvalue local-i)
                                                                     (jit-lvalue->jit-rvalue local-i)))
-    (add-assignment/op block:lp-body 'plus local-i (jit-type->1 type:int))
+    (add-assignment/op block:lp-body '+ local-i (jit-type->1 type:int))
     (block-end/jump block:lp-body block:lp-cond)
 
     (block-end/return block:after-lp (jit-lvalue->jit-rvalue local-sum))

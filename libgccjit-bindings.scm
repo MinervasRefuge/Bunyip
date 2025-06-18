@@ -103,7 +103,27 @@
                   (string-append found "_")))))
 
     (define (cleaner member-name)
-      ((fn-cleaner found-prefix) member-name))
+      (let ((ce-name ((fn-cleaner found-prefix) member-name)))
+        (match ce-name
+          ("mult" "*")
+          ("plus" "+")
+          ("divide" "/")
+          ("minus" "-")
+          ("lshift" "<<")
+          ("rshift" ">>")
+          ("modulo" "%")
+          ("logical-and" "and")
+          ("logical-or" "or")
+          ("bitwise-and" "&")
+          ("bitwise-or" "bor")
+          ("bitwise-xor" "^")
+          ("ne" "!=")
+          ("le" "<=")
+          ("lt" "<")
+          ("eq" "=")
+          ("ge" ">=")
+          ("gt" ">")
+          (a a))))
 
     (values pre cleaner))
 
