@@ -41,6 +41,7 @@
                                         ; gcc jit clean bindings
                                         ;
 
+
                                         ; Types
 
 ;; ** Nicked from =libgccjit.h=
@@ -95,7 +96,11 @@
 (define-ptr-record jit-lvalue)
 (define-ptr-record jit-parameter)
 
-                                        ; printers
+
+(define current-context (make-parameter #f))
+
+                                        ; Printers
+
 (define-syntax define-printer-for-like-jit-object
   (λ (stx)
     (syntax-case stx ()
@@ -141,9 +146,11 @@
   ;; These don't have direct to `->object` implementations, is there a reason?
   (jit-struct (-> f:struct-as-type/gcc-jit-type-* f:type-as-object/gcc-jit-object-*))
   ;; jit-function-type & jit-vector-type has no converters
-)
+  )
 
+
                                         ; Predicates
+
 (define-inlinable (f-or-jit-location? a)
   (or (and (boolean? a) (not a))
       (jit-location? a)))
@@ -160,7 +167,9 @@
   (and (list? a)
        (every jit-rvalue? a)))
 
+
                                         ; To Conversions
+
 (define-syntax define-to-conversion
   (λ (stx)
     (syntax-case stx ()
@@ -212,23 +221,6 @@
   (begin (unless (guard? var) (throw 'wrong-type-arg 'guard? var))
          ...))
 
-(define (jit-object->debug-string obj)
-  (-> obj
-      jit-object-ptr
-      f:object-get-debug-string/const-char-*
-      pointer->string
-      string-copy))
-
-(with-return-pointer-guard
- <jit-type>
- (define* (symbol->jit-type sym #:optional (context (current-context)))
-   (guards (enum:types? sym))
-   
-   (f:context-get-type/gcc-jit-type-*
-    (jit-context-ptr context)
-    (hashq-ref enum:types/sym->int sym))))
-
-                                        ; Utils
 (define-inlinable (jit-location-ptr/nullable location)
   (if location
       (jit-location-ptr location)
@@ -248,14 +240,53 @@
    lst)
   out)
 
+(define (jit-object->debug-string obj)
+  (-> obj
+      jit-object-ptr
+      f:object-get-debug-string/const-char-*
+      pointer->string
+      string-copy))
+
+(with-return-pointer-guard
+ <jit-type>
+ (define* (symbol->jit-type sym #:optional (context (current-context)))
+   (guards (enum:types? sym))
+   
+   (f:context-get-type/gcc-jit-type-*
+    (jit-context-ptr context)
+    (hashq-ref enum:types/sym->int sym))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (string->string-literal str #:optional (context (current-context)))
+   (f:context-new-string-literal/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (string->pointer str))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (jit-type->zero type #:optional (context (current-context)))
+   (f:context-zero/gcc-jit-rvalue-*
+    (jit-context-ptr context)
+    (jit-type-ptr type))))
+
+
                                         ; Common Functions
-(define current-context (make-parameter #f))
 
 (define (context-acquire)
   (make-jit-context (f:context-acquire/gcc-jit-context-*)))
 
 (define (context-release context)
   (f:context-release/void (jit-context-ptr context)))
+
+(define* (set-boolean-option! option bool #:optional (context (current-context)))
+  (guards (boolean? bool)
+          (enum:bool-option? option))
+  
+  (f:context-set-bool-option/void
+   (jit-context-ptr context)
+   (hashq-ref enum:bool-option/sym->int option)
+   (if bool 1 0)))
 
 (with-return-pointer-guard
  <jit-parameter>
@@ -288,13 +319,6 @@
     (length parameter-list)
     (bytevector->pointer (pointer-list->bytevector (map jit-parameter-ptr parameter-list)))
     (if variadic? 1 0))))
-
-(with-return-pointer-guard
- <jit-rvalue>
- (define* (string->string-literal str #:optional (context (current-context)))
-   (f:context-new-string-literal/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (string->pointer str))))
 
 (with-return-pointer-guard
  <jit-block>
@@ -363,15 +387,6 @@
 
 (define (jit-result-release result)
   (f:result-release/void (jit-result-ptr result)))
-
-(define* (set-boolean-option! option bool #:optional (context (current-context)))
-  (guards (boolean? bool)
-          (enum:bool-option? option))
-  
-  (f:context-set-bool-option/void
-   (jit-context-ptr context)
-   (hashq-ref enum:bool-option/sym->int option)
-   (if bool 1 0)))
 
 (with-return-pointer-guard
  <jit-rvalue>
