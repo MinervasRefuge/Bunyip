@@ -521,7 +521,9 @@
 
 (define (jit-result->procedure result name ffi-return-type . ffi-arg-types)
   (let ((pptr (jit-result->get-code-ptr result name)))
-    (apply pointer->procedure ffi-return-type pptr ffi-arg-types)))
+    (if (null-pointer? pptr)
+        (throw 'gcc-jit "Can't get procedure" name)
+        (pointer->procedure ffi-return-type pptr ffi-arg-types))))
 
 (define (jit-result-release result)
   (f:result-release/void (jit-result-ptr result)))
@@ -778,8 +780,8 @@
   (parameterize ((current-context (context-acquire)))
     (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-1))
-           (gfn (jit-result->get-code-ptr result "greet")))
-      ((pointer->procedure void gfn (list '*)) (string->pointer "Abby!")))))
+           (gfn (jit-result->procedure result "greet" void '*)))
+      (gfn (string->pointer "Abby!")))))
 
 
 
@@ -799,8 +801,8 @@
   (parameterize ((current-context (context-acquire)))
     (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-2))
-           (gfn (jit-result->get-code-ptr result "square")))
-      (format #t "squaring 5 in jit: ~s~%" ((pointer->procedure int gfn (list int)) 5)))))
+           (gfn (jit-result->procedure result "square" int int)))
+      (format #t "squaring 5 in jit: ~s~%" (gfn 5)))))
 
 
 
@@ -845,5 +847,7 @@
   (parameterize ((current-context (context-acquire)))
     (set-boolean-option! 'dump-generated-code #t)
     (let* ((result (example-3))
-           (gfn (jit-result->get-code-ptr result "loop_test")))
-      (format #t "result of loop over 10: ~s~%" ((pointer->procedure int gfn (list int)) 10)))))
+           (gfn (jit-result->procedure result "loop_test" int int)))
+      (format #t "result of loop over 10: ~s~%" (gfn 10)))))
+
+
