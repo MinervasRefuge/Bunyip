@@ -111,9 +111,9 @@
 (define-ptr-record jit-extended-asm)
 
 (define-ptr-record jit-type)
-(define-ptr-record jit-struct) ;; or jit-struct-type?
-(define-ptr-record jit-function-type)
-(define-ptr-record jit-vector-type)
+(define-ptr-record jit-type/struct)
+(define-ptr-record jit-type/function)
+(define-ptr-record jit-type/vector)
 
 (define-ptr-record jit-rvalue)
 (define-ptr-record jit-lvalue)
@@ -167,8 +167,8 @@
   (jit-parameter f:param-as-object/gcc-jit-object-*)
   
   ;; These don't have direct to `->object` implementations, is there a reason?
-  (jit-struct (-> f:struct-as-type/gcc-jit-type-* f:type-as-object/gcc-jit-object-*))
-  ;; jit-function-type & jit-vector-type has no converters
+  (jit-type/struct (-> f:struct-as-type/gcc-jit-type-* f:type-as-object/gcc-jit-object-*))
+  ;; jit-type/function & jit-type/vector has no converters
   )
 
 
@@ -218,7 +218,9 @@
   (jit-parameter jit-object f:param-as-object/gcc-jit-object-*)
   (jit-lvalue jit-rvalue f:lvalue-as-rvalue/gcc-jit-rvalue-*)
   (jit-lvalue jit-object f:lvalue-as-object/gcc-jit-object-*)
-  (jit-rvalue jit-object f:rvalue-as-object/gcc-jit-object-*))
+  (jit-rvalue jit-object f:rvalue-as-object/gcc-jit-object-*)
+  
+  (jit-type/struct jit-type f:struct-as-type/gcc-jit-type-*))
 ;; These don't have direct to `->object` implementations
 ;; jit-struct, jit-function-type & jit-vector-type
 
