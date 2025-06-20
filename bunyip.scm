@@ -207,18 +207,31 @@
 
 (define-syntax with-return-pointer-guard
   (λ (stx)
+    (define (type->make type-stx)
+      (let ((type (-> (syntax->datum type-stx)
+                      symbol->string)))
+        (->> (substring type 1 (1- (string-length type)))
+             (string-append "make-")
+             string->symbol
+             (datum->syntax type-stx))))
+    
     (syntax-case stx ()
+      ((_ xreturn-type (xdef xparams xdoc . xbody)) (string? (syntax->datum #'xdoc))
+       (with-syntax ((xmake (type->make #'xreturn-type)))
+         #'(xdef xparams
+             xdoc
+             (let ((out (begin . xbody)))
+               (if (null-pointer? out)
+                   #f
+                   (xmake out))))))
+
       ((_ xreturn-type (xdef xparams . xbody))
-       (let ((return-type (symbol->string (syntax->datum #'xreturn-type))))
-         (with-syntax ((xmake (->> (substring return-type 1 (1- (string-length return-type)))
-                                   (string-append "make-")
-                                   string->symbol
-                                   (datum->syntax #'xreturn-type))))
-           #'(xdef xparams
-               (let ((out (begin . xbody)))
-                 (if (null-pointer? out)
-                     #f
-                     (xmake out))))))))))
+       (with-syntax ((xmake (type->make #'xreturn-type)))
+         #'(xdef xparams
+             (let ((out (begin . xbody)))
+               (if (null-pointer? out)
+                   #f
+                   (xmake out)))))))))
 
 ;; Note: Probably no need to guard records as the type gets check on the *-ptr call
 (define-syntax-rule (guards (guard? var) ...)
