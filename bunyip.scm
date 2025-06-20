@@ -7,6 +7,7 @@
 
 (define-module (bunyip)
   #:use-module (srfi srfi-1)      ;; SRFI  1 - List library
+  #:use-module (srfi srfi-2)      ;; SRFI  2 - and-let*
   #:use-module (srfi srfi-9)      ;; SRFI  9 - Records
   #:use-module (srfi srfi-9 gnu)  ;; SRFI  9 - extention set-record-type-printer!
   ;;#:use-module (srfi srfi-26)   ;; SRFI 26 - specializing parameters (cute, cut)
@@ -37,6 +38,23 @@
     ((_ a b . rst)
      (->> (b a) . rst))
     ((_ a) a)))
+
+(eval-when (expand load eval)
+  (define (syntax? s)
+    (string-prefix? "#<syntax" (format #f "~a" s)))
+
+  (define (format-syntax/string id fmt . args)
+    (datum->syntax id 
+      (apply format #f fmt
+             (map (λ (a) (if (syntax? a) (syntax->datum a) a))
+                  args))))
+  
+  (define (format-syntax/symbol id fmt . args)
+    (datum->syntax id
+      (string->symbol
+       (apply format #f fmt
+              (map (λ (a) (if (syntax? a) (syntax->datum a) a))
+                   args))))))
                                         ;
                                         ; gcc jit clean bindings
                                         ;
@@ -112,28 +130,24 @@
        #'(begin (define-printer-for-like-jit-object xname xupcast-raw)
                 ...))
       ((_ xname xupcast-raw)
-       (let ((name (syntax->datum #'xname)))
-         (with-syntax ((xrec     (datum->syntax #'xname (symbol-append '< name '>)))
-                       (xptr-ref (datum->syntax #'xname (symbol-append name '-ptr))))
-           #'(set-record-type-printer!
-              xrec
-              (λ (record port)
-                (format port "~a"
-                        (-> record
-                            xptr-ref
-                            xupcast-raw
-                            f:object-get-debug-string/const-char-*
-                            pointer->string))))))))))
-
-(set-record-type-printer! <jit-object>
- (λ (record port)
-   (format port "~a"
-           (-> record
-               jit-object-ptr
-               f:object-get-debug-string/const-char-*
-               pointer->string))))
+       (with-syntax ((xrec     (format-syntax/symbol #'xname "<~a>" #'xname))
+                     (xptr-ref (format-syntax/symbol #'xname "~a-ptr" #'xname))
+                     (xfmt-str (format-syntax/string #'xname "<~a ~~a>" #'xname)))
+         #'(set-record-type-printer!
+            xrec
+            (λ (record port)
+              (or (and-let* ((rptr (xptr-ref record))
+                             ((pointer? rptr))
+                             ((not (null-pointer? rptr)))
+                             (uptr (xupcast-raw rptr))
+                             ((not (null-pointer? uptr)))
+                             (sptr (f:object-get-debug-string/const-char-* uptr))
+                             ((not (null-pointer? sptr))))
+                    (format port xfmt-str (pointer->string sptr)))
+                  (format port xfmt-str (xptr-ref record))))))))))
 
 (define-printer-for-like-jit-object
+  (jit-object       identity)
   (jit-location     f:location-as-object/gcc-jit-object-*)
   (jit-field        f:field-as-object/gcc-jit-object-*)
   (jit-function     f:function-as-object/gcc-jit-object-*)
@@ -181,13 +195,11 @@
        #'(begin (define-to-conversion xfrom xto xconv)
                 ...))
       ((_ xfrom xto xconv)
-       (let ((from (syntax->datum #'xfrom))
-             (to   (syntax->datum #'xto)))
-         (with-syntax ((xconvfn  (datum->syntax #'xconv (symbol-append from '-> to)))
-                       (xptr-ref (datum->syntax #'xfrom (symbol-append from '-ptr)))
-                       (xtomake  (datum->syntax #'xto (symbol-append 'make- to))))
-           #'(define (xconvfn xfrom)
-               (-> xfrom xptr-ref xconv xtomake))))))))
+       (with-syntax ((xconvfn  (format-syntax/symbol #'xconv "~a->~a" #'xfrom #'xto))
+                     (xptr-ref (format-syntax/symbol #'xfrom "~a-ptr" #'xfrom))
+                     (xtomake  (format-syntax/symbol #'xto  "make-~a" #'xto)))
+         #'(define (xconvfn xfrom)
+             (-> xfrom xptr-ref xconv xtomake)))))))
 
 (define-to-conversion
   (jit-location     jit-object f:location-as-object/gcc-jit-object-*)
@@ -210,10 +222,7 @@
     (define (type->make type-stx)
       (let ((type (-> (syntax->datum type-stx)
                       symbol->string)))
-        (->> (substring type 1 (1- (string-length type)))
-             (string-append "make-")
-             string->symbol
-             (datum->syntax type-stx))))
+        (format-syntax/symbol type-stx "make-~a" (substring type 1 (1- (string-length type))))))
     
     (syntax-case stx ()
       ((_ xreturn-type (xdef xparams xdoc . xbody)) (string? (syntax->datum #'xdoc))
