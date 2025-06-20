@@ -126,6 +126,29 @@
 (define *guardian-jit-result*  (make-guardian))
 
 
+                                        ; Error
+
+(define (get-first-error context)
+  (and-let* ((ptr (f:context-get-first-error/const-char-* (jit-context-ptr context)))
+             ((not (null-pointer? ptr))))
+    (string-copy (pointer->string ptr))))
+
+(define (get-last-error context)
+  (and-let* ((ptr (f:context-get-last-error/const-char-* (jit-context-ptr context)))
+             ((not (null-pointer? ptr))))
+    (string-copy (pointer->string ptr))))
+
+(define-inlinable (throw-if-context-error context)
+  (let ((last-err (get-last-error context)))
+    (when last-err
+      (throw 'gcc-jit last-err))))
+
+(define-syntax-rule (with-jit-err context return)
+  (let ((ptr return))
+    (throw-if-context-error context)
+    ptr))
+
+
                                         ; Printers
 
 (define-syntax define-printer-for-like-jit-object
@@ -287,41 +310,51 @@
  <jit-type>
  (define* (symbol->jit-type sym #:optional (context (current-context)))
    (guards (enum:types? sym))
-   
-   (f:context-get-type/gcc-jit-type-*
-    (jit-context-ptr context)
-    (hashq-ref enum:types/sym->int sym))))
+
+   (with-jit-err
+    context
+    (f:context-get-type/gcc-jit-type-*
+     (jit-context-ptr context)
+     (hashq-ref enum:types/sym->int sym)))))
 
 (with-return-pointer-guard
  <jit-rvalue>
  (define* (string->string-literal str #:optional (context (current-context)))
-   (f:context-new-string-literal/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (string->pointer str))))
+   (with-jit-err
+    context
+    (f:context-new-string-literal/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (string->pointer str)))))
 
 (with-return-pointer-guard
  <jit-rvalue>
  (define* (jit-type->0 type #:optional (context (current-context)))
-   (f:context-zero/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-type-ptr type))))
+   (with-jit-err
+    context
+    (f:context-zero/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-type-ptr type)))))
 
 (with-return-pointer-guard
  <jit-rvalue>
  (define* (jit-type->1 type #:optional (context (current-context)))
-   (f:context-one/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-type-ptr type))))
+   (with-jit-err
+    context
+    (f:context-one/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-type-ptr type)))))
 
 (with-return-pointer-guard
  <jit-rvalue>
  (define* (integer->jit-rvalue type int #:optional (context (current-context)))
    (guards (integer? int))
-   
-   (f:context-new-rvalue-from-int/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-type-ptr type)
-    int)))
+
+   (with-jit-err
+    context
+    (f:context-new-rvalue-from-int/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-type-ptr type)
+     int))))
 
 ;; (f:context-new-rvalue-from-ptr/gcc-jit-rvalue-*
 ;;  f:context-new-rvalue-from-long/gcc-jit-rvalue-*
@@ -355,26 +388,13 @@
 (define* (set-boolean-option! option bool #:optional (context (current-context)))
   (guards (boolean? bool)
           (enum:bool-option? option))
-  
-  (f:context-set-bool-option/void
-   (jit-context-ptr context)
-   (hashq-ref enum:bool-option/sym->int option)
-   (if bool 1 0)))
 
-(define (get-first-error context)
-  (and-let* ((ptr (f:context-get-first-error/const-char-* (jit-context-ptr context)))
-             ((not (null-pointer? ptr))))
-    (string-copy (pointer->string ptr))))
-
-(define (get-last-error context)
-  (and-let* ((ptr (f:context-get-last-error/const-char-* (jit-context-ptr context)))
-             ((not (null-pointer? ptr))))
-    (string-copy (pointer->string ptr))))
-
-(define-inlinable (throw-if-context-error context)
-  (let ((last-err (get-last-error context)))
-    (when last-err
-      (throw 'gcc-jit last-err))))
+  (with-jit-err
+   context
+   (f:context-set-bool-option/void
+    (jit-context-ptr context)
+    (hashq-ref enum:bool-option/sym->int option)
+    (if bool 1 0))))
 
 (with-return-pointer-guard
  <jit-parameter>
@@ -382,12 +402,14 @@
    (guards
     (string? name)
     (f-or-jit-location? location))
-   
-   (f:context-new-param/gcc-jit-param-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)    
-    (jit-type-ptr type)
-    (string->pointer name))))
+
+   (with-jit-err
+    context
+    (f:context-new-param/gcc-jit-param-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (jit-type-ptr type)
+     (string->pointer name)))))
 
 (with-return-pointer-guard
  <jit-function>
@@ -397,16 +419,18 @@
     (enum:function-kind? kind)
     (f-or-jit-location? location)
     (list-of-jit-parameters? parameter-list))
-   
-   (f:context-new-function/gcc-jit-function-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (hashq-ref enum:function-kind/sym->int kind)
-    (jit-type-ptr return-type)
-    (string->pointer name)
-    (length parameter-list)
-    (bytevector->pointer (pointer-list->bytevector (map jit-parameter-ptr parameter-list)))
-    (if variadic? 1 0))))
+
+   (with-jit-err
+    context
+    (f:context-new-function/gcc-jit-function-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (hashq-ref enum:function-kind/sym->int kind)
+     (jit-type-ptr return-type)
+     (string->pointer name)
+     (length parameter-list)
+     (bytevector->pointer (pointer-list->bytevector (map jit-parameter-ptr parameter-list)))
+     (if variadic? 1 0)))))
 
 (with-return-pointer-guard
  <jit-block>
@@ -432,13 +456,15 @@
  (define* (new-call function rvalue-list #:optional (context (current-context)) #:key (location #f))
    (guards (list-of-jit-rvalues? rvalue-list)
            (f-or-jit-location? location))
-   
-   (f:context-new-call/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (jit-function-ptr function)
-    (length rvalue-list)
-    (bytevector->pointer (pointer-list->bytevector (map jit-rvalue-ptr rvalue-list))))))
+
+   (with-jit-err
+    context
+    (f:context-new-call/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (jit-function-ptr function)
+     (length rvalue-list)
+     (bytevector->pointer (pointer-list->bytevector (map jit-rvalue-ptr rvalue-list)))))))
 
 (define* (block-end/void block #:optional #:key (location #f))
   (guards (f-or-jit-location? location))
@@ -477,8 +503,9 @@
 ;; f:block-end-with-extended-asm-goto/gcc-jit-extended-asm-*
 
 (define* (compile-jit #:optional (context (current-context)))
-  (let ((ptr (f:context-compile/gcc-jit-result-*
-              (jit-context-ptr context))))
+  (let ((ptr (with-jit-err
+              context
+              (f:context-compile/gcc-jit-result-* (jit-context-ptr context)))))
     (if (null-pointer? ptr)
         #f
         (let ((res (make-jit-result ptr)))
@@ -506,13 +533,15 @@
     (f-or-jit-location? location)
     (enum:binary-op? binary-op))
 
-   (f:context-new-binary-op/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (hashq-ref enum:binary-op/sym->int binary-op)
-    (jit-type-ptr return-type)
-    (jit-rvalue-ptr a)
-    (jit-rvalue-ptr b))))
+   (with-jit-err
+    context
+    (f:context-new-binary-op/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (hashq-ref enum:binary-op/sym->int binary-op)
+     (jit-type-ptr return-type)
+     (jit-rvalue-ptr a)
+     (jit-rvalue-ptr b)))))
 
 (with-return-pointer-guard
  <jit-lvalue>
@@ -552,13 +581,15 @@
  (define* (new-comparison compare a b #:optional (context (current-context)) #:key (location #f))
    (guards (enum:comparison? compare)
            (f-or-jit-location? location))
-   
-   (f:context-new-comparison/gcc-jit-rvalue-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (hashq-ref enum:comparison/sym->int compare)
-    (jit-rvalue-ptr a)
-    (jit-rvalue-ptr b))))
+
+   (with-jit-err
+    context
+    (f:context-new-comparison/gcc-jit-rvalue-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (hashq-ref enum:comparison/sym->int compare)
+     (jit-rvalue-ptr a)
+     (jit-rvalue-ptr b)))))
 
 (define (jit-type-sizeof type)
   (f:type-get-size/ssize-t
@@ -589,12 +620,14 @@
    "'T' => 'T[N]'"
    (guards (f-or-jit-location? location)
            (integer? count))
-   
-   (f:context-new-array-type/gcc-jit-type-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (jit-type-ptr type)
-    count)))
+
+   (with-jit-err
+    context
+    (f:context-new-array-type/gcc-jit-type-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (jit-type-ptr type)
+     count))))
 
 (with-return-pointer-guard
  <jit-type>
@@ -609,11 +642,14 @@
  <jit-lvalue>
  (define* (new-array-access pointer index #:optional (context (current-context)) #:key (location #f))
    (guards (f-or-jit-location? location))
-   (f:context-new-array-access/gcc-jit-lvalue-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (jit-rvalue-ptr pointer)
-    (jit-rvalue-ptr index))))
+
+   (with-jit-err
+    context
+    (f:context-new-array-access/gcc-jit-lvalue-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (jit-rvalue-ptr pointer)
+     (jit-rvalue-ptr index)))))
 
 ;;gcc_jit_context_new_function_ptr_type
 
@@ -623,12 +659,14 @@
  <jit-field>
  (define* (new-field name type #:optional (context (current-context)) #:key (location #f))
    (guards (f-or-jit-location? location))
-   
-   (f:context-new-field/gcc-jit-field-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (jit-type-ptr type)
-    (string->pointer name))))
+
+   (with-jit-err
+    context
+    (f:context-new-field/gcc-jit-field-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (jit-type-ptr type)
+     (string->pointer name)))))
 
 (with-return-pointer-guard
  <jit-type/struct>
@@ -636,14 +674,16 @@
    (guards (f-or-jit-location? location)
            (list-of-jit-fields? fields))
 
-   (f:context-new-struct-type/gcc-jit-struct-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (string->pointer name)
-    (length fields)
-    (-> (map jit-field-ptr fields)
-        pointer-list->bytevector
-        bytevector->pointer))))
+   (with-jit-err
+    context
+    (f:context-new-struct-type/gcc-jit-struct-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (string->pointer name)
+     (length fields)
+     (-> (map jit-field-ptr fields)
+         pointer-list->bytevector
+         bytevector->pointer)))))
 
 ;; (define-syntax-rule (define-jit-struct name (field type) ...)
 ;;   (new-struct (symbol->string 'name) (list (new-field (symbol->string 'field) type) ...)))
@@ -653,10 +693,12 @@
  (define* (new-opaque-struct name #:optional (context (current-context)) #:key (location #f))
    (guards (f-or-jit-location? location))
 
-   (f:context-new-opaque-struct/gcc-jit-struct-*
-    (jit-context-ptr context)
-    (jit-location-ptr/nullable location)
-    (string->pointer name))))
+   (with-jit-err
+    context
+    (f:context-new-opaque-struct/gcc-jit-struct-*
+     (jit-context-ptr context)
+     (jit-location-ptr/nullable location)
+     (string->pointer name)))))
 
 (with-return-pointer-guard
  <jit-lvalue>
