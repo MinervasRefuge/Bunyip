@@ -278,11 +278,10 @@
   out)
 
 (define (jit-object->debug-string obj)
-  (-> obj
-      jit-object-ptr
-      f:object-get-debug-string/const-char-*
-      pointer->string
-      string-copy))
+  (let ((sptr (-> obj jit-object-ptr f:object-get-debug-string/const-char-*)))
+    (if (null-pointer? sptr)
+        #f
+        (string-copy (pointer->string sptr)))))
 
 (with-return-pointer-guard
  <jit-type>
@@ -361,6 +360,21 @@
    (jit-context-ptr context)
    (hashq-ref enum:bool-option/sym->int option)
    (if bool 1 0)))
+
+(define (get-first-error context)
+  (and-let* ((ptr (f:context-get-first-error/const-char-* (jit-context-ptr context)))
+             ((not (null-pointer? ptr))))
+    (string-copy (pointer->string ptr))))
+
+(define (get-last-error context)
+  (and-let* ((ptr (f:context-get-last-error/const-char-* (jit-context-ptr context)))
+             ((not (null-pointer? ptr))))
+    (string-copy (pointer->string ptr))))
+
+(define-inlinable (throw-if-context-error context)
+  (let ((last-err (get-last-error context)))
+    (when last-err
+      (throw 'gcc-jit last-err))))
 
 (with-return-pointer-guard
  <jit-parameter>
