@@ -190,6 +190,10 @@
   (and (list? a)
        (every jit-rvalue? a)))
 
+(define-inlinable (list-of-jit-fields? a)
+  (and (list? a)
+       (every jit-field? a)))
+
 
                                         ; To Conversions
 
@@ -541,6 +545,142 @@
     (hashq-ref enum:comparison/sym->int compare)
     (jit-rvalue-ptr a)
     (jit-rvalue-ptr b))))
+
+(define (jit-type-sizeof type)
+  (f:type-get-size/ssize-t
+   (jit-type-ptr type)))
+
+;; typing tools
+(with-return-pointer-guard
+ <jit-type>
+ (define (jit-type->pointer-type type)
+   "'T' => 'T*'"
+   (f:type-get-pointer/gcc-jit-type-* (jit-type-ptr type))))
+
+(with-return-pointer-guard
+ <jit-type>
+ (define (jit-type->const-type type)
+   "'T' => 'const T'"
+   (f:type-get-const/gcc-jit-type-* (jit-type-ptr type))))
+
+(with-return-pointer-guard
+ <jit-type>
+ (define (jit-type->volatile-type type)
+   "'T' => 'volatile T'"
+   (f:type-get-volatile/gcc-jit-type-* (jit-type-ptr type))))
+
+(with-return-pointer-guard
+ <jit-type>
+ (define* (jit-type->array-type type count #:optional (context (current-context)) #:key (location #f))
+   "'T' => 'T[N]'"
+   (guards (f-or-jit-location? location)
+           (integer? count))
+   
+   (f:context-new-array-type/gcc-jit-type-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (jit-type-ptr type)
+    count)))
+
+(with-return-pointer-guard
+ <jit-type>
+ (define* (jit-type->aligned-type type #:optional (byte-alignment (jit-type-sizeof type)))
+   "'T' => 'align(sizeof) T'"
+   (f:type-get-aligned/gcc-jit-type-*
+    (jit-type-ptr type)
+    byte-alignment)))
+
+;; other
+(with-return-pointer-guard
+ <jit-lvalue>
+ (define* (new-array-access pointer index #:optional (context (current-context)) #:key (location #f))
+   (guards (f-or-jit-location? location))
+   (f:context-new-array-access/gcc-jit-lvalue-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (jit-rvalue-ptr pointer)
+    (jit-rvalue-ptr index))))
+
+;;gcc_jit_context_new_function_ptr_type
+
+;; struct
+
+(with-return-pointer-guard
+ <jit-field>
+ (define* (new-field name type #:optional (context (current-context)) #:key (location #f))
+   (guards (f-or-jit-location? location))
+   
+   (f:context-new-field/gcc-jit-field-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (jit-type-ptr type)
+    (string->pointer name))))
+
+(with-return-pointer-guard
+ <jit-type/struct>
+ (define* (new-struct name fields #:optional (context (current-context)) #:key (location #f))
+   (guards (f-or-jit-location? location)
+           (list-of-jit-fields? fields))
+
+   (f:context-new-struct-type/gcc-jit-struct-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (string->pointer name)
+    (length fields)
+    (-> (map jit-field-ptr fields)
+        pointer-list->bytevector
+        bytevector->pointer))))
+
+;; (define-syntax-rule (define-jit-struct name (field type) ...)
+;;   (new-struct (symbol->string 'name) (list (new-field (symbol->string 'field) type) ...)))
+
+(with-return-pointer-guard
+ <jit-type/struct>
+ (define* (new-opaque-struct name #:optional (context (current-context)) #:key (location #f))
+   (guards (f-or-jit-location? location))
+
+   (f:context-new-opaque-struct/gcc-jit-struct-*
+    (jit-context-ptr context)
+    (jit-location-ptr/nullable location)
+    (string->pointer name))))
+
+(with-return-pointer-guard
+ <jit-lvalue>
+ (define* (access-field/lvalue expr field #:optional #:key (location #f))
+   "expr.field = ..."
+   (guards (f-or-jit-location? location))
+   
+   (f:lvalue-access-field/gcc-jit-lvalue-*
+    (jit-lvalue-ptr expr)
+    (jit-location-ptr/nullable location)
+    (jit-field-ptr field))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (access-field/rvalue expr field #:optional #:key (location #f))
+   "expr.field"
+   (guards (f-or-jit-location? location))
+   
+   (f:rvalue-access-field/gcc-jit-rvalue-* 
+    (jit-rvalue-ptr expr)
+    (jit-location-ptr/nullable location)
+    (jit-field-ptr field))))
+
+(with-return-pointer-guard
+ <jit-rvalue>
+ (define* (dereference-field ptr field #:optional #:key (location #f))
+   "ptr->field"
+   (guards (f-or-jit-location? location))
+   
+   (f:rvalue-dereference-field/gcc-jit-lvalue-*
+    (jit-rvalue-ptr ptr)
+    (jit-location-ptr/nullable location)
+    (jit-field-ptr field))))
+
+;;context-set-fields
+;;new-bitfield
+
+;; new-union
 
 
                                         ; GC Hook Cleanup
