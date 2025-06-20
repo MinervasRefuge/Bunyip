@@ -606,6 +606,12 @@
 
 
 
+(define-syntax with-block
+  (syntax-rules (_)
+    ((_ block (block-fn _  . args) ...)
+     (begin
+       (block-fn block . args) ...))))
+
 (define (example-3)
   (define type:int (symbol->jit-type 'int))
 
@@ -617,18 +623,21 @@
          (block:lp-cond  (new-block fn "loop_cond"))
          (block:lp-body  (new-block fn "loop_body"))
          (block:after-lp (new-block fn "after_loop")))
-    (add-assignment block:initial local-sum (jit-type->0 type:int))
-    (add-assignment block:initial local-i   (jit-type->0 type:int))
-    (block-end/jump block:initial block:lp-cond)
+    
+    (with-block block:initial
+      (add-assignment _ local-sum (jit-type->0 type:int))
+      (add-assignment _ local-i   (jit-type->0 type:int))
+      (block-end/jump _ block:lp-cond))
 
     (let ((cmp (new-comparison '>= (jit-lvalue->jit-rvalue local-i) (jit-parameter->jit-rvalue param-n))))
       (block-end/conditional block:lp-cond cmp block:after-lp block:lp-body))
-    
-    (add-assignment/op block:lp-body '+ local-sum (new-binary-op '* type:int
-                                                                    (jit-lvalue->jit-rvalue local-i)
-                                                                    (jit-lvalue->jit-rvalue local-i)))
-    (add-assignment/op block:lp-body '+ local-i (jit-type->1 type:int))
-    (block-end/jump block:lp-body block:lp-cond)
+
+    (with-block block:lp-body
+      (add-assignment/op _ '+ local-sum (new-binary-op '* type:int
+                                                       (jit-lvalue->jit-rvalue local-i)
+                                                       (jit-lvalue->jit-rvalue local-i)))
+      (add-assignment/op _ '+ local-i (jit-type->1 type:int))
+      (block-end/jump _ block:lp-cond))
 
     (block-end/return block:after-lp (jit-lvalue->jit-rvalue local-sum))
     
