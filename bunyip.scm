@@ -94,7 +94,12 @@
                        (xptr-ref (datum->syntax #'xname (symbol-append name '-ptr))))
            #'(define-record-type xrec (xmake ptr) xpred? (ptr xptr-ref))))))))
 
-(define-ptr-record jit-context)
+(define-record-type <jit-context>
+  (make-jit-context ptr parent)
+  jit-context?
+  (ptr jit-context-ptr)
+  (parent jit-context-parent))
+
 (define-ptr-record jit-result)
 
 (define-ptr-record jit-object)
@@ -318,17 +323,29 @@
 ;;  f:context-new-rvalue-from-double/gcc-jit-rvalue-*
 ;;  f:context-new-rvalue-from-vector/gcc-jit-rvalue-*)
 
-
+(define (jit-object-like->jit-context obj)
+  (let ((ptr (f:object-get-context/gcc-jit-context-*
+              (record-accessor obj 'ptr))))
+    (if (null-pointer? ptr)
+        #f
+        (make-jit-context ptr #f))))
 
                                         ; Common Functions
 
 (define (context-acquire)
-  (let ((cx (make-jit-context (f:context-acquire/gcc-jit-context-*))))
+  (let ((cx (make-jit-context (f:context-acquire/gcc-jit-context-*) #f)))
     (*guardian-jit-context* cx)
     cx))
 
 (define (context-release context)
   (f:context-release/void (jit-context-ptr context)))
+
+(define (context-acquire/child parent-context)
+  (let* ((ptr (f:context-new-child-context/gcc-jit-context-*
+               (jit-context-ptr parent-context)))
+         (cx (make-jit-context ptr parent-context)))
+    (*guardian-jit-context* cx)
+    cx))
 
 (define* (set-boolean-option! option bool #:optional (context (current-context)))
   (guards (boolean? bool)
