@@ -50,7 +50,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:variable-attribute/alist)))
-  (define (#{% enum:variable-attribute?-procedure}# a)
+  (define-inlinable (enum:variable-attribute? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:variable-attribute/sym->int a)))))
@@ -123,7 +123,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:fn-attribute/alist)))
-  (define (#{% enum:fn-attribute?-procedure}# a)
+  (define-inlinable (enum:fn-attribute? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:fn-attribute/sym->int a)))))
@@ -1215,7 +1215,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:comparison/alist)))
-  (define (#{% enum:comparison?-procedure}# a)
+  (define-inlinable (enum:comparison? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:comparison/sym->int a)))))
   (define ffi:context-new-binary-op
@@ -1259,7 +1259,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:binary-op/alist)))
-  (define (#{% enum:binary-op?-procedure}# a)
+  (define-inlinable (enum:binary-op? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:binary-op/sym->int a)))))
   (define ffi:context-new-unary-op
@@ -1293,7 +1293,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:unary-op/alist)))
-  (define (#{% enum:unary-op?-procedure}# a)
+  (define-inlinable (enum:unary-op? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:unary-op/sym->int a)))))
   (define ffi:context-new-string-literal
@@ -1633,7 +1633,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:global-kind/alist)))
-  (define (#{% enum:global-kind?-procedure}# a)
+  (define-inlinable (enum:global-kind? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:global-kind/sym->int a)))))
@@ -1764,7 +1764,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:tls-model/alist)))
-  (define (#{% enum:tls-model?-procedure}# a)
+  (define-inlinable (enum:tls-model? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:tls-model/sym->int a)))))
   (define enum:function-kind/alist
@@ -1778,7 +1778,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:function-kind/alist)))
-  (define (#{% enum:function-kind?-procedure}# a)
+  (define-inlinable (enum:function-kind? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:function-kind/sym->int a)))))
@@ -2172,7 +2172,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:types/alist)))
-  (define (#{% enum:types?-procedure}# a)
+  (define-inlinable (enum:types? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:types/sym->int a)))))
   (define ffi:type-as-object
@@ -2361,7 +2361,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:output-kind/alist)))
-  (define (#{% enum:output-kind?-procedure}# a)
+  (define-inlinable (enum:output-kind? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:output-kind/sym->int a)))))
@@ -2509,7 +2509,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:bool-option/alist)))
-  (define (#{% enum:bool-option?-procedure}# a)
+  (define-inlinable (enum:bool-option? a)
     (and (symbol? a)
          (not (boolean?
                 (hashq-ref enum:bool-option/sym->int a)))))
@@ -2521,7 +2521,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:int-option/alist)))
-  (define (#{% enum:int-option?-procedure}# a)
+  (define-inlinable (enum:int-option? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:int-option/sym->int a)))))
   (define enum:str-option/alist
@@ -2533,7 +2533,7 @@
     (alist->hashq-table
       (map (lambda (c) (cons (cdr c) (car c)))
            enum:str-option/alist)))
-  (define (#{% enum:str-option?-procedure}# a)
+  (define-inlinable (enum:str-option? a)
     (and (symbol? a)
          (not (boolean? (hashq-ref enum:str-option/sym->int a)))))
   (define ffi:context-release
