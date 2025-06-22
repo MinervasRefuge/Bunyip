@@ -28,24 +28,9 @@
   #:use-module (clang-ast-tools)
 )
 
-                                        ;
-                                        ; auto generate rules
-                                        ;
-;; (define-syntax-rule (as-alist a ...)
-;;   (list `(a . ,a) ...))
-
-;; (define-syntax-rule (incf place value)
-;;   (set! place (+ place value)))
-
 (define-syntax-rule (pushp place value)
   (set! place (cons value place)))
 
-;; (define-syntax-rule (popp place)
-;;   (if (null? place)
-;;       '()
-;;       (let ((v (car v)))
-;;         (set! place (cdr place))
-;;         v)))
 
 (define-syntax generate-ast
   (λ (x)
@@ -56,6 +41,11 @@
               (clang-ast (call-clang-for-ast-dump lheader lclang)))
          (with-syntax ((ast (datum->syntax #'header-path clang-ast)))
            #''ast))))))
+
+;; (define-syntax header-ast
+;;   (λ (_)
+;;     #'(call-clang-for-ast-dump "/gnu/store/6wnizcd3zsq2cbinwczfilpn7dsbh17j-libgccjit-15.1.0/include/libgccjit.h"
+;;                                "/gnu/store/bq87yzd4bmvg8al3fl4nprmpiv62g7vv-clang-20.1.4/bin/clang")))
 
 (eval-when (expand load eval)
   (define header-ast (generate-ast "/gnu/store/6wnizcd3zsq2cbinwczfilpn7dsbh17j-libgccjit-15.1.0/include/libgccjit.h"
@@ -171,19 +161,55 @@
                 ...)))))
 
 
-                                        ;
-                                        ; Foreign Library
-                                        ;
 
-(define-syntax-rule (define-with-guard (name (arg guard?) ...) . body)
-  (define (name arg ...)
-    (unless (guard? arg) (throw 'wrong-type-arg (quote guard?) arg)) ...
-    . body))
+(define-syntax all-gen
+  (λ (stx)
+    (define (mf-ast lib-sym)
+      (λ (node)
+        (match node
+          ((and (= (cut assq-ref <> 'kind) 'FunctionDecl)
+                (? predicate-filter-functions _))    `(all-gen function ,lib-sym ,node))
+          ((= (cut assq-ref <> 'kind) 'EnumDecl)     `(all-gen enum ,node))
+          (_ #f))))
+    
+    (syntax-case stx (function enum)
+      ((_ xlib)
+       (let* ((lib (syntax->datum #'xlib))
+              (asts (map-filter-matching-asts header-ast (mf-ast lib)))
+              (xall (map (cut datum->syntax stx <>) asts)))
+         #`(begin #,@xall)))
+      
+      ((_ function lib a)
+       #'(begin (ast-function->define-ffi-function gcc-jit-cleaners lib a)
+                (ast-function->define-function gcc-jit-cleaners a)))
+      
+      ((_ enum a)
+       #'(ast-enum->define-enum gcc-jit-cleaners a)))))
 
-(define gcc-jit (load-foreign-library "libgccjit"
-                                     #:search-path '("/gnu/store/6wnizcd3zsq2cbinwczfilpn7dsbh17j-libgccjit-15.1.0/lib/")
-                                     ))
-(all-enums)
-(all-functions gcc-jit)
+
+
+(define gcc-jit-lib
+  (load-foreign-library
+   "libgccjit"
+   #:search-path '("/gnu/store/6wnizcd3zsq2cbinwczfilpn7dsbh17j-libgccjit-15.1.0/lib/")))
+
+(all-gen gcc-jit-lib)
+
+;; (all-enums)
+;; (all-functions gcc-jit)
 
 (module-export-all! (current-module))
+
+;; ((define-module (libgccjit-exported)
+;;     #:use-module (ice-9 hash-table) ;; additional alist->... fns
+;;     #:use-module (system foreign)
+;;     #:use-module (system foreign-library))
+  
+;;   (define gcc-jit-lib
+;;     (load-foreign-library
+;;      "libgccjit"
+;;      #:search-path '("/gnu/store/6wnizcd3zsq2cbinwczfilpn7dsbh17j-libgccjit-15.1.0/lib/")))
+
+;;   (all-gen gcc-jit-lib)
+
+;;   (module-export-all! (current-module)))

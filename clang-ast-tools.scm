@@ -29,6 +29,8 @@
             pretty-format-ast
             pretty-print-ast
             find-toplevel-matching-asts
+            filter-matching-asts
+            map-filter-matching-asts
 
             find-longest-prefix
             find-longest-prefix/list
@@ -152,6 +154,30 @@
         (? (cut equality? <> value) _))
      #t)
     (_ #f)))
+
+(define (filter-matching-asts provided-ast ast-filter)
+  (define roots (list))
+  (define ast-match
+    (match-lambda
+      ((? ast-filter ast)
+       (pushp roots ast))
+      ((and (= (cut assq-ref <> 'inner) (? vector? inner)))
+       (vector-for-each (λ (_ elt) (ast-match elt)) inner))
+      (_ #f)))
+  (ast-match provided-ast)
+  roots)
+
+(define (map-filter-matching-asts provided-ast ast-map-filter)
+  (define roots (list))
+  (define ast-match
+    (match-lambda
+      ((= ast-map-filter (? (match-lambda (#f #f) (_ #t)) ast))
+       (pushp roots ast))
+      ((and (= (cut assq-ref <> 'inner) (? vector? inner)))
+       (vector-for-each (λ (_ elt) (ast-match elt)) inner))
+      (_ #f)))
+  (ast-match provided-ast)
+  roots)
 
 
 
