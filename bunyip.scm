@@ -20,7 +20,8 @@
   #:use-module (rnrs bytevectors)
   #:use-module (system foreign)
   #:use-module (ice-9 match)
-  #:use-module (libgccjit-bindings)
+  ;;#:use-module (libgccjit-bindings)
+  #:use-module (libgccjit-exported)
   )
 
 (define-syntax ->
